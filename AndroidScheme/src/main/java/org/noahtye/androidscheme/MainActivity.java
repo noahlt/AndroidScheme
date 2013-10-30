@@ -10,11 +10,9 @@ import android.widget.EditText;
 import android.widget.TextView;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Stack;
 
-public class MainActivity extends Activity {
+public class MainActivity extends Activity implements Scheme {
 
     private Sexpr parse(String expr) {
         return readFrom(tokenize(expr));
@@ -49,166 +47,15 @@ public class MainActivity extends Activity {
         } else if (token.equals(")")) {
             return new Sexpr().parseError("unexpected ')' while reading");
         } else {
-            return parseAtom(token);
+            return Satom.parseToken(token);
         }
     }
 
-    private class Sexpr {
-        public String parseError = null;
-        public String evalError = null;
-        public Sexpr parseError(String errorMessage) {
-            parseError = errorMessage;
-            return this;
-        }
-        public Sexpr evalError(String errorMessage) {
-            evalError = errorMessage;
-            return this;
-        }
-        public String toString() {
-            if (parseError != null) {
-                return parseError;
-            } else if (evalError != null) {
-                return evalError;
-            } else {
-                return "what a boring sexpr";
-            }
-        }
-    }
-    private class Slist extends Sexpr {
-        private ArrayList<Sexpr> list;
-        public Slist() {
-            list = new ArrayList<Sexpr>();
-        }
-        public Slist(ArrayList<Sexpr> existingList) {
-            list = existingList;
-        }
-        public void append(Sexpr sexpr) {
-            list.add(sexpr);
-        }
-        public Sexpr head() {
-            return list.get(0);
-        }
-        public Sexpr get(int n) {
-            return list.get(n);
-        }
-        public Slist rest() {
-            return new Slist(rawRest());
-        }
-        public ArrayList<Sexpr> rawRest() {
-            return new ArrayList<Sexpr>(list.subList(1, list.size()));
-        }
-        public ArrayList<Sexpr> raw() {
-            return list;
-        }
-        public int size() {
-            return list.size();
-        }
-        public ArrayList<Sint> allSint() {
-            ArrayList<Sint> r = new ArrayList<Sint>(list.size());
-            for (Sexpr x : list) {
-                if (x instanceof Sint) {
-                    r.add((Sint) x);
-                } else {
-                    return null;
-                }
-            }
-            return r;
-        }
-        public ArrayList<Sfloat> allSfloat() {
-            ArrayList<Sfloat> r = new ArrayList<Sfloat>(list.size());
-            for (Sexpr x : list) {
-                if (x instanceof Sfloat) {
-                    r.add((Sfloat) x);
-                } else if (x instanceof Sint) {
-                    r.add(((Sint) x).toSfloat());
-                } else {
-                    return null;
-                }
-            }
-            return r;
-        }
-        public ArrayList<Symbol> allSymbol() {
-            ArrayList<Symbol> r = new ArrayList<Symbol>(list.size());
-            for (Sexpr x : list) {
-                if (x instanceof Symbol) {
-                    r.add((Symbol) x);
-                } else {
-                    return null;
-                }
-            }
-            return r;
-        }
-        public String toString() {
-            StringBuilder sb = new StringBuilder();
-            sb.append('(');
-            for (int i = 0; i < list.size() - 1; i++) {
-                sb.append(list.get(i).toString());
-                sb.append(' ');
-            }
-            sb.append(list.get(list.size() - 1)); // last token doesn't get a space before ')'
-            sb.append(')');
-            return sb.toString();
-        }
-    }
+    private static Symbol NIL = new Symbol("nil");
+    private static Symbol TRUE = new Symbol("true");
+    private static Symbol FALSE = new Symbol("false");
 
-    /*private class Satom extends Sexpr {
-        public static Satom fromToken(String token) {
-            try {
-                return Sint(Integer.parseInt(token));
-            } catch (NumberFormatException e1) {
-                try {
-                    return Sfloat(Float.parseFloat(token));
-                } catch (NumberFormatException e2) {
-                    return Symbol(token);
-                }
-            }
-        }
-    }*/
-
-    private class Satom extends Sexpr {}
-
-    private Satom parseAtom(String atomToken) {
-        try {
-            return new Sint(Integer.parseInt(atomToken));
-        } catch (NumberFormatException e1) {
-            try {
-                return new Sfloat(Float.parseFloat(atomToken));
-            } catch (NumberFormatException e2) {
-                return new Symbol(atomToken);
-            }
-        }
-    }
-
-    private class Sint extends Satom {
-        int value;
-        public Sint(int i) { value = i; }
-        public int get() { return value; }
-        public String toString() { return String.valueOf(value); }
-        public Sfloat toSfloat() { return new Sfloat((float) value); }
-    }
-
-    private class Sfloat extends Satom {
-        float value;
-        public Sfloat(float f) { value = f; }
-        public String toString() { return String.valueOf(value); }
-    }
-
-    private class Symbol extends Satom {
-        String name;
-        public Symbol(String s) { name = s; }
-        public String get() { return name; }
-        public String toString() { return name; }
-        public boolean equals(Symbol sym) { return (sym != null) && name.equals(sym.get()); }
-        public boolean equals(String str) { return name.equals(str); }
-    }
-
-    // TODO all these static
-    private Symbol NIL = new Symbol("nil");
-    private Symbol TRUE = new Symbol("true");
-    private Symbol FALSE = new Symbol("false");
-
-    private Sexpr eval(Sexpr sexpr, Env env) {
-        Log.d("noah", "eval: " + sexpr.toString());
+    public Sexpr eval(Sexpr sexpr, Env env) {
         if (sexpr instanceof Symbol) {
             return env.get(((Symbol) sexpr).get());
         }
@@ -217,8 +64,6 @@ public class MainActivity extends Activity {
         } else if (sexpr instanceof Slist) {
             Slist slist = (Slist) sexpr;
             Symbol sym = (slist.head() instanceof Symbol) ? ((Symbol) slist.head()) : null;
-            Log.d("noah", "sym != null? " + (sym != null));
-            if (sym != null) { Log.d("noah", "sym: " + sym.get()); }
             if (sym != null && sym.equals("quote")) {
                 if (2 == slist.size()) {
                     return slist.get(1);
@@ -267,7 +112,7 @@ public class MainActivity extends Activity {
                     evalledList.append(eval(x, env));
                 }
                 if (evalledList.head() instanceof Proc) {
-                    return ((Proc) evalledList.get(0)).apply(evalledList.rest(), env);
+                    return ((Proc) evalledList.get(0)).apply(evalledList.rest(), env, this);
                 } else {
                     return new Sexpr().evalError("Evaluation error: couldn't find proc " +
                                                  slist.head() + " from " + sexpr.toString());
@@ -278,61 +123,8 @@ public class MainActivity extends Activity {
         }
     }
 
-    private class Env {
-        private HashMap<String, Sexpr> envHash;
-        private Env parent;
-        public Env() {
-            envHash = new HashMap<String, Sexpr>();
-        }
-        public Env(Env parent) {
-            this();
-            this.parent = parent;
-        }
-        public Sexpr get(String key) {
-            if (envHash.containsKey(key)) {
-                return envHash.get(key);
-            } else if (parent != null) {
-                return parent.get(key);
-            }
-            return null;
-        }
-        public void set(String key, Sexpr val) {
-            envHash.put(key, val);
-        }
-        public void set(Symbol key, Sexpr val) {
-            envHash.put(key.get(), val);
-        }
-    }
-
-    private abstract class Proc extends Sexpr {
-        public abstract Sexpr apply(Slist args, Env env);
-        public String toString() {
-            return "<proc>";
-        }
-    }
-
-    private class UserProc extends Proc {
-        private Sexpr src;
-        private Slist argNames;
-        public UserProc(Slist argNames, Sexpr src) {
-            this.src = src;
-            this.argNames = argNames;
-        }
-        public Sexpr apply(Slist args, Env enclosingEnv) {
-            if (args.size() == argNames.size()) {
-                Env env = new Env(enclosingEnv);
-                for (int i = 0; i < argNames.size(); i++) {
-                    env.set((Symbol) argNames.get(i), args.get(i));
-                }
-                return eval(src, env);
-            } else {
-                return new Sexpr().evalError("function expects " + (argNames.size()-1) + " arguments; received " + (args.size() - 1));
-            }
-        }
-    }
-
     private class Add extends Proc {
-        public Sexpr apply(Slist args, Env env) {
+        public Sexpr apply(Slist args, Env env, Scheme scheme) {
             ArrayList<Sint> sints = args.allSint();
             if (sints != null) {
                 int r = 0;
@@ -350,7 +142,7 @@ public class MainActivity extends Activity {
     }
 
     private class Multiply extends Proc {
-        public Sexpr apply(Slist args, Env env) {
+        public Sexpr apply(Slist args, Env env, Scheme scheme) {
             ArrayList<Sint> sints = args.allSint();
             if (sints != null) {
                 int r = 1;
@@ -368,7 +160,7 @@ public class MainActivity extends Activity {
     }
 
     private class Subtract extends Proc {
-        public Sexpr apply(Slist args, Env env) {
+        public Sexpr apply(Slist args, Env env, Scheme scheme) {
             ArrayList<Sint> sints = args.allSint();
             if (sints != null && sints.size() > 1) {
                 int r = sints.get(0).get();
@@ -389,7 +181,7 @@ public class MainActivity extends Activity {
 
     private class And extends Proc {
         // TODO short-circuiting and can't be implemented as a regular function
-        public Sexpr apply(Slist args, Env env) {
+        public Sexpr apply(Slist args, Env env, Scheme scheme) {
             ArrayList<Symbol> sbools = args.allSymbol();
             if (sbools != null && sbools.size() > 0) {
                 for (int i = 1; i < sbools.size(); i++) {
@@ -404,7 +196,7 @@ public class MainActivity extends Activity {
     }
 
     private class LessThan extends Proc {
-        public Sexpr apply(Slist args, Env env) {
+        public Sexpr apply(Slist args, Env env, Scheme scheme) {
             ArrayList<Sint> sints = args.allSint();
             if (sints != null && sints.size() > 0) {
                 for (int i = 1; i < sints.size(); i++) {
